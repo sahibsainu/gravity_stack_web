@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-space-800 bg-white;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold text-space-900;
+  }
+  
+  h1 {
+    @apply text-4xl md:text-5xl lg:text-6xl leading-tight;
+  }
+  
+  h2 {
+    @apply text-3xl md:text-4xl leading-tight;
+  }
+  
+  h3 {
+    @apply text-2xl md:text-3xl leading-tight;
+  }
+  
+  h4 {
+    @apply text-xl md:text-2xl;
+  }
+  
+  p {
+    @apply text-base leading-relaxed;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-lg text-base font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-space-800 text-white hover:bg-space-900 focus:ring-space-800;
+  }
+  
+  .btn-outline {
+    @apply btn bg-transparent border-2 border-primary-500 text-primary-500 hover:bg-primary-50 focus:ring-primary-500;
+  }
+  
+  .btn-ghost {
+    @apply btn bg-transparent text-space-800 hover:bg-cosmic-50 focus:ring-space-500;
+  }
+
+  .container-custom {
+    @apply container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl;
+  }
+  
+  .section {
+    @apply py-12 md:py-20;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl shadow-soft overflow-hidden;
+  }
+  
+  .card-hover {
+    @apply transform transition duration-300 hover:shadow-medium hover:-translate-y-1;
+  }
+  
+  .input {
+    @apply w-full px-4 py-3 border border-cosmic-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  }
+  
+  .label {
+    @apply block text-sm font-medium text-space-700 mb-1;
+  }
+}
+
+/* Custom scroll bar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-cosmic-50;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-cosmic-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-cosmic-400;
+}
+
+/* Animations */
+.fade-in {
+  animation: fadeIn 0.5s ease-in forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

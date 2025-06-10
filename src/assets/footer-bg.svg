@@ -1,0 +1,13 @@
+<svg width="1440" height="400" viewBox="0 0 1440 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="400" fill="#0A1128"/>
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M0 90.5908C249.5 31.8607 410.5 -6.82095 720 1.17913C1051.5 9.87921 1124.5 79.0908 1440 90.5908V400H0V90.5908Z" fill="#0C1D3B" fill-opacity="0.5"/>
+  <g opacity="0.3">
+    <circle cx="123" cy="256" r="2" fill="white"/>
+    <circle cx="523" cy="156" r="2" fill="white"/>
+    <circle cx="923" cy="123" r="2" fill="white"/>
+    <circle cx="1323" cy="156" r="2" fill="white"/>
+    <circle cx="323" cy="256" r="2" fill="white"/>
+    <circle cx="723" cy="356" r="2" fill="white"/>
+    <circle cx="1123" cy="256" r="2" fill="white"/>
+  </g>
+</svg>
