@@ -13,7 +13,6 @@ import {
   LogOut,
   User,
   Monitor,
-  ChevronDown,
   HardDrive, // For Volumes
   Cloud, // For Environments
   Key, // For Key Pairs
@@ -33,8 +32,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [environmentsDropdownOpen, setEnvironmentsDropdownOpen] = useState(false); // State for Environments dropdown
-  const { authState, logout, selectProject } = useAuth(); // Get selectProject
+  const { authState, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -46,22 +44,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const selectedProject = authState.userProjects.find(
     (p) => p.id === authState.selectedProjectId
   );
-
-  // Handle project selection from dropdown
-  const handleProjectSelect = async (projectId: string) => {
-    if (authState.user?.user_metadata?.openstack_username && authState.user?.user_metadata?.password) {
-        // Assuming password is still available or can be re-prompted/stored securely
-        // For this example, we'll use the password from user_metadata (NOT SECURE FOR PRODUCTION)
-        // A production app would handle this differently (e.g., re-prompting, token refresh)
-        await selectProject(projectId, authState.user.user_metadata.openstack_username, authState.user.user_metadata.password);
-        setEnvironmentsDropdownOpen(false); // Close dropdown after selection
-    } else {
-        // Handle case where username or password is not available
-        console.error("Cannot switch project: OpenStack username or password not available.");
-        // Potentially navigate to a re-authentication or project selection page
-    }
-  };
-
 
   return (
     <div className="flex h-screen bg-cosmic-50">
@@ -140,44 +122,20 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             <span>Volumes</span>
           </NavLink>
 
-          {/* Environments Section with Project Dropdown */}
-          <div>
-            <button
-              onClick={() => setEnvironmentsDropdownOpen(!environmentsDropdownOpen)}
-              className={`flex items-center justify-between w-full px-4 py-3 rounded-lg ${
-                environmentsDropdownOpen
+          {/* Re-added Environments Link */}
+          <NavLink
+            to="/dashboard/environments"
+            className={({ isActive }) =>
+              `flex items-center space-x-2 px-4 py-3 rounded-lg ${
+                isActive
                   ? 'bg-primary-50 text-primary-700'
                   : 'text-space-600 hover:bg-cosmic-50 hover:text-space-900'
-              } transition-colors duration-200`}
-            >
-              <div className="flex items-center space-x-2">
-                <Cloud size={20} />
-                <span>Environments</span>
-              </div>
-              <ChevronDown size={16} className={`transform transition-transform ${environmentsDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {environmentsDropdownOpen && (
-              <div className="pl-8 py-1 space-y-1">
-                {authState.userProjects.length > 0 ? (
-                  authState.userProjects.map((project) => (
-                    <button
-                      key={project.id}
-                      className={`block w-full text-left px-4 py-2 rounded-lg text-sm ${
-                        authState.selectedProjectId === project.id
-                          ? 'bg-primary-100 text-primary-800 font-semibold'
-                          : 'text-space-600 hover:bg-cosmic-50 hover:text-space-900'
-                      } transition-colors duration-200`}
-                      onClick={() => handleProjectSelect(project.id)}
-                    >
-                      {project.displayName}
-                    </button>
-                  ))
-                ) : (
-                  <p className="px-4 py-2 text-sm text-cosmic-500">No projects found.</p>
-                )}
-              </div>
-            )}
-          </div>
+              } transition-colors duration-200`
+            }
+          >
+            <Cloud size={20} />
+            <span>Environments</span>
+          </NavLink>
 
           <NavLink
             to="/dashboard/key-pairs"
@@ -433,47 +391,21 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 <span>Volumes</span>
               </NavLink>
 
-              {/* Environments Section with Project Dropdown (Mobile) */}
-              <div>
-                <button
-                  onClick={() => setEnvironmentsDropdownOpen(!environmentsDropdownOpen)}
-                  className={`flex items-center justify-between w-full px-4 py-3 rounded-lg ${
-                    environmentsDropdownOpen
+              {/* Re-added Environments Link (Mobile) */}
+              <NavLink
+                to="/dashboard/environments"
+                className={({ isActive }) =>
+                  `flex items-center space-x-2 px-4 py-3 rounded-lg ${
+                    isActive
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-space-600 hover:bg-cosmic-50 hover:text-space-900'
-                  } transition-colors duration-200`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <Cloud size={20} />
-                    <span>Environments</span>
-                  </div>
-                  <ChevronDown size={16} className={`transform transition-transform ${environmentsDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {environmentsDropdownOpen && (
-                  <div className="pl-8 py-1 space-y-1">
-                    {authState.userProjects.length > 0 ? (
-                      authState.userProjects.map((project) => (
-                        <button
-                          key={project.id}
-                          className={`block w-full text-left px-4 py-2 rounded-lg text-sm ${
-                            authState.selectedProjectId === project.id
-                              ? 'bg-primary-100 text-primary-800 font-semibold'
-                              : 'text-space-600 hover:bg-cosmic-50 hover:text-space-900'
-                          } transition-colors duration-200`}
-                          onClick={() => {
-                            handleProjectSelect(project.id);
-                            setSidebarOpen(false); // Close mobile sidebar on selection
-                          }}
-                        >
-                          {project.displayName}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-4 py-2 text-sm text-cosmic-500">No projects found.</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                  } transition-colors duration-200`
+                }
+                onClick={() => setSidebarOpen(false)}
+              >
+                <Cloud size={20} />
+                <span>Environments</span>
+              </NavLink>
 
               <NavLink
                 to="/dashboard/key-pairs"

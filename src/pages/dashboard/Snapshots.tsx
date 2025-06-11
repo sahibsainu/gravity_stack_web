@@ -1,27 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, X, Volume2, ExternalLink } from 'lucide-react'; // Added Search, Volume2, ExternalLink
+import { Plus, Search, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { fetchVMs } from '../../api/compute.ts';
+import { fetchSnapshots } from '../../api/compute'; // Using compute for now, ideally separate API
 import { useAuth } from '../../context/AuthContext';
-import { VM } from '../../types/openstack'; // Import VM from openstack types
+import { Snapshot } from '../../types/openstack';
 
-const Compute = () => {
+const Snapshots = () => {
   const { authState } = useAuth();
   const { openstackToken, selectedProjectId } = authState;
 
-  const [vms, setVms] = useState<VM[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showSpotVMBanner, setShowSpotVMBanner] = useState(true); // State for banner visibility
-  const [searchTerm, setSearchTerm] = useState(''); // State for search input
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const loadVMs = async () => {
+    const loadSnapshots = async () => {
       if (!openstackToken || !selectedProjectId) {
-        console.warn("Cannot fetch VMs: GravityStack token or project not available.");
-        setVms([]);
+        console.warn("Cannot fetch snapshots: GravityStack token or project not available.");
+        setSnapshots([]);
         setIsLoading(false);
         setError("Please select an OpenStack project to view resources.");
         return;
@@ -30,17 +29,17 @@ const Compute = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const servers = await fetchVMs(authState);
-        setVms(servers);
+        const fetchedSnapshots = await fetchSnapshots(authState);
+        setSnapshots(fetchedSnapshots);
       } catch (error) {
-        console.error('Error fetching VMs:', error);
-        setError('Failed to fetch virtual machines. Please try again later.');
+        console.error('Error fetching snapshots:', error);
+        setError('Failed to fetch snapshots. Please try again later.');
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadVMs();
+    loadSnapshots();
   }, [authState, openstackToken, selectedProjectId]);
 
   const openCreateModal = () => {
@@ -51,55 +50,25 @@ const Compute = () => {
     setIsCreateModalOpen(false);
   };
 
-  const filteredVms = vms.filter(vm =>
-    vm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vm.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vm.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vm.ipAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (vm.image && vm.image.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (vm.environment && vm.environment.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredSnapshots = snapshots.filter(snapshot =>
+    snapshot.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    snapshot.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    snapshot.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    snapshot.status.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <h1 className="text-2xl font-bold text-space-900">My Virtual Machines</h1>
+        <h1 className="text-2xl font-bold text-space-900">My Snapshots</h1>
 
-        {/* Spot VMs Banner */}
-        {showSpotVMBanner && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="bg-primary-600 text-white p-4 rounded-lg flex items-start justify-between shadow-soft"
-          >
-            <div className="flex items-center">
-              <Volume2 className="h-6 w-6 mr-3 flex-shrink-0" />
-              <div>
-                <p className="font-semibold">Spot VMs Now Available for A100 & L40 GPUs</p>
-                <p className="text-sm mt-1">
-                  Run high-performance workloads at reduced cost with Spot VMs. Spot instances may be deleted at any time without notice; if terminated, any attached volumes must be deleted manually.
-                  <a href="#" className="underline ml-1 flex items-center inline-flex">
-                    Learn more <ExternalLink className="h-4 w-4 ml-1" />
-                  </a>
-                </p>
-              </div>
-            </div>
-            <button onClick={() => setShowSpotVMBanner(false)} className="text-white hover:text-primary-100 ml-4 flex-shrink-0">
-              <X className="h-5 w-5" />
-            </button>
-          </motion.div>
-        )}
-
-        {/* VM Listing */}
         <div className="bg-white rounded-xl shadow-soft p-6">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0 md:space-x-4">
             <div className="relative w-full md:w-1/2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-cosmic-400 h-5 w-5" />
               <input
                 type="text"
-                placeholder="Search for a virtual machine"
+                placeholder="Search for a snapshot"
                 className="input pl-10 w-full"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -107,24 +76,24 @@ const Compute = () => {
             </div>
             <button className="btn-primary w-full md:w-auto" onClick={openCreateModal}>
               <Plus className="h-5 w-5 mr-2" />
-              <span>Deploy New Virtual Machine</span>
+              <span>Create New Snapshot</span>
             </button>
           </div>
 
           {isLoading ? (
             <div className="text-center py-10">
-              <p className="text-cosmic-600">Loading virtual machines...</p>
+              <p className="text-cosmic-600">Loading snapshots...</p>
             </div>
           ) : error ? (
             <div className="text-center py-10 text-red-600">
               {error}
             </div>
-          ) : filteredVms.length === 0 ? (
+          ) : filteredSnapshots.length === 0 ? (
             <div className="text-center py-10">
-              <p className="text-cosmic-600 mb-4">You have not created any virtual machine yet.</p>
-              <p className="text-cosmic-600 mb-6">Click below to create your first virtual machine.</p>
+              <p className="text-cosmic-600 mb-4">You have not created any snapshot yet.</p>
+              <p className="text-cosmic-600 mb-6">Click below to create your first snapshot.</p>
               <button className="btn-primary" onClick={openCreateModal}>
-                Deploy New Virtual Machine
+                Create New Snapshot
               </button>
             </div>
           ) : (
@@ -139,16 +108,10 @@ const Compute = () => {
                       ID
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-cosmic-500 uppercase tracking-wider">
-                      GPU
+                      Source
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-cosmic-500 uppercase tracking-wider">
-                      Image
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-cosmic-500 uppercase tracking-wider">
-                      Environment
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-cosmic-500 uppercase tracking-wider">
-                      Public IP
+                      Size (GB)
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-cosmic-500 uppercase tracking-wider">
                       Status
@@ -162,41 +125,34 @@ const Compute = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-cosmic-200">
-                  {filteredVms.map((vm) => (
-                    <tr key={vm.id}>
+                  {filteredSnapshots.map((snapshot) => (
+                    <tr key={snapshot.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-space-900">
-                        {vm.name}
+                        {snapshot.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-cosmic-600">
-                        {vm.id.substring(0, 8)}...
+                        {snapshot.id.substring(0, 8)}...
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-cosmic-600">
-                        {vm.gpu || 'N/A'}
+                        {snapshot.source}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-cosmic-600">
-                        {vm.image || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-cosmic-600">
-                        {vm.environment || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-cosmic-600">
-                        {vm.publicIp || vm.ipAddress || 'N/A'}
+                        {snapshot.sizeGb}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          vm.status === 'ACTIVE' ? 'bg-success-100 text-success-800' :
-                          vm.status === 'BUILD' ? 'bg-warning-100 text-warning-800' :
+                          snapshot.status === 'available' ? 'bg-success-100 text-success-800' :
+                          snapshot.status === 'creating' ? 'bg-warning-100 text-warning-800' :
                           'bg-cosmic-100 text-cosmic-800'
                         }`}>
-                          {vm.status}
+                          {snapshot.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-cosmic-600">
-                        {vm.creationDate}
+                        {snapshot.creationDate}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {/* Add action buttons here */}
-                        <button className="text-primary-600 hover:text-primary-900 mr-2">Manage</button>
+                        <button className="text-primary-600 hover:text-primary-900 mr-2">Restore</button>
                         <button className="text-danger-600 hover:text-danger-900">Delete</button>
                       </td>
                     </tr>
@@ -207,7 +163,6 @@ const Compute = () => {
           )}
         </div>
 
-        {/* Create VM Modal (remains the same) */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-cosmic-900 bg-opacity-50">
             <motion.div
@@ -218,56 +173,29 @@ const Compute = () => {
               className="bg-white rounded-xl shadow-soft p-8 w-full max-w-md"
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-space-900">Create New Virtual Machine</h2>
+                <h2 className="text-xl font-bold text-space-900">Create New Snapshot</h2>
                 <button onClick={closeCreateModal} className="text-space-500 hover:text-space-700">
                   <X className="h-6 w-6" />
                 </button>
               </div>
 
-              {/* VM Creation Form */}
               <form className="space-y-4">
                 <div>
-                  <label htmlFor="image" className="label">
-                    Image
+                  <label htmlFor="snapshotName" className="label">
+                    Snapshot Name
                   </label>
-                  <input type="text" id="image" className="input" placeholder="Image ID" />
+                  <input type="text" id="snapshotName" className="input" placeholder="e.g., my-vm-snapshot" />
                 </div>
 
                 <div>
-                  <label htmlFor="flavor" className="label">
-                    Flavor
+                  <label htmlFor="sourceId" className="label">
+                    Source (VM or Volume ID)
                   </label>
-                  <input type="text" id="flavor" className="input" placeholder="Flavor ID" />
-                </div>
-
-                <div>
-                  <label htmlFor="network" className="label">
-                    Network
-                  </label>
-                  <input type="text" id="network" className="input" placeholder="Network ID" />
-                </div>
-
-                <div>
-                  <label htmlFor="securityGroups" className="label">
-                    Security Groups
-                  </label>
-                  <input
-                    type="text"
-                    id="securityGroups"
-                    className="input"
-                    placeholder="Security Group IDs (comma-separated)"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="keyPair" className="label">
-                    Key Pair
-                  </label>
-                  <input type="text" id="keyPair" className="input" placeholder="Key Pair Name" />
+                  <input type="text" id="sourceId" className="input" placeholder="ID of VM or Volume to snapshot" />
                 </div>
 
                 <button type="submit" className="btn-primary w-full">
-                  Create VM
+                  Create Snapshot
                 </button>
               </form>
             </motion.div>
@@ -278,4 +206,4 @@ const Compute = () => {
   );
 };
 
-export default Compute;
+export default Snapshots;

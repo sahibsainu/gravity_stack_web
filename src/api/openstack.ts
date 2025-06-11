@@ -2,6 +2,7 @@ import axios from 'axios';
 import { generateRandomString } from '../utils';
 import { supabase } from '../utils/supabaseClient'; // Import supabase client
 import { log, logError } from '../utils'; // Import logging utilities
+import { getCommonConfig } from '../utils/config'; // Import the new config utility
 
 // Create axios instance with default configs
 const api = axios.create({
@@ -13,14 +14,14 @@ const api = axios.create({
 // --- Secure Admin Credential Handling (Supabase via Axios) ---
 
 // Function to get admin credentials from Supabase
-const getAdminCredentialsFromSupabase = async (): Promise<{ username: string, password: string }> => {
+const getAdminCredentialsFromSupabase = async (): Promise<{ username: string, password: string, gravity_project_id: string }> => {
   const ADMIN_CREDENTIALS_TABLE = 'admin_credentials'; // Define table name
 
   try {
     // 1. Fetch credentials from Supabase
     const { data, error } = await supabase
       .from(ADMIN_CREDENTIALS_TABLE)
-      .select('username, password')
+      .select('username, password, gravity_project_id')
       .limit(1); // Assuming only one set of admin credentials
 
     if (error) {
@@ -45,7 +46,7 @@ const getAdminCredentialsFromSupabase = async (): Promise<{ username: string, pa
 
 // Function to get OpenStack Admin Token securely
 const getAdminTokenSecurely = async (): Promise<string> => {
-    const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
+    const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
     const defaultDomainName = import.meta.env.VITE_OPENSTACK_DEFAULT_DOMAIN || 'Default'; // Default domain
 
     if (!keystoneUrl) {
@@ -107,8 +108,8 @@ const getAdminTokenSecurely = async (): Promise<string> => {
 // Now accepts the desired username as an argument
 export const createOpenStackUser = async (username: string, password: string): Promise<string> => {
   const adminToken = await getAdminTokenSecurely(); // Use the secure method
-  const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
-  const defaultDomainId = import.meta.env.VITE_OPENSTACK_DEFAULT_DOMAIN_ID || 'default'; // Default domain ID
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
+  const { gravity_project_id: defaultDomainId } = await getAdminCredentialsFromSupabase(); // Get from admin_credentials
 
   if (!keystoneUrl) {
     throw new Error("OpenStack Keystone URL is not configured.");
@@ -146,8 +147,8 @@ export const createOpenStackUser = async (username: string, password: string): P
 // Function to create an OpenStack project (Requires Admin Token)
 export const createOpenStackProject = async (projectName: string): Promise<string> => {
   const adminToken = await getAdminTokenSecurely(); // Use the secure method
-  const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
-  const defaultDomainId = import.meta.env.VITE_OPENSTACK_DEFAULT_DOMAIN_ID || 'default'; // Default domain ID
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
+  const { gravity_project_id: defaultDomainId } = await getAdminCredentialsFromSupabase(); // Get from admin_credentials
 
   if (!keystoneUrl) {
     throw new Error("OpenStack Keystone URL is not configured.");
@@ -184,7 +185,7 @@ export const createOpenStackProject = async (projectName: string): Promise<strin
 // Function to get a role ID by name (Requires Admin Token)
 const getRoleId = async (roleName: string): Promise<string> => {
   const adminToken = await getAdminTokenSecurely(); // Use the secure method
-  const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
 
   if (!keystoneUrl) {
     throw new Error("OpenStack Keystone URL is not configured.");
@@ -222,7 +223,7 @@ const getRoleId = async (roleName: string): Promise<string> => {
 // Function to assign a role to a user on a project (Requires Admin Token)
 export const assignRoleToUserOnProject = async (userId: string, projectId: string, roleName: string = 'member'): Promise<void> => {
   const adminToken = await getAdminTokenSecurely(); // Use the secure method
-  const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
 
   if (!keystoneUrl) {
     throw new Error("OpenStack Keystone URL is not configured.");
@@ -256,9 +257,9 @@ export const assignRoleToUserOnProject = async (userId: string, projectId: strin
 // Function to list projects for a specific user (Requires Admin Token)
 // Note: This requires admin privileges to list all projects and check user assignments.
 // A more efficient API might exist depending on the OpenStack version/configuration.
-export const listUserProjects = async (openstackUserId: string): Promise<{ id: string, name: string }[]> => {
+export const listUserProjects = async (openstackUserId: string): Promise<{ id: string, name: string, createdAt?: string }[]> => {
   const adminToken = await getAdminTokenSecurely(); // Use the secure method
-  const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
 
   if (!keystoneUrl) {
     throw new Error("OpenStack Keystone URL is not configured.");
@@ -301,7 +302,11 @@ export const listUserProjects = async (openstackUserId: string): Promise<{ id: s
 
     const userProjects = allProjects
         .filter((project: any) => userProjectIds.has(project.id))
-        .map((project: any) => ({ id: project.id, name: project.name }));
+        .map((project: any) => ({
+          id: project.id,
+          name: project.name,
+          createdAt: project.created_at, // Include created_at timestamp
+        }));
 
     return userProjects;
 
@@ -318,7 +323,7 @@ export const listUserProjects = async (openstackUserId: string): Promise<{ id: s
 // Function to authenticate a user with a specific project scope (Does NOT require Admin Token)
 // Now accepts the OpenStack username
 export const authenticateUserWithProject = async (openstackUsername: string, password: string, projectId: string): Promise<string> => {
-  const keystoneUrl = import.meta.env.LOGIN_URL; // Use LOGIN_URL
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
   const defaultDomainName = import.meta.env.VITE_OPENSTACK_DEFAULT_DOMAIN || 'Default'; // Default domain
 
   if (!keystoneUrl) {
@@ -365,10 +370,64 @@ export const authenticateUserWithProject = async (openstackUsername: string, pas
   }
 };
 
+/**
+ * Obtains a project-scoped token for a given OpenStack user ID and project ID,
+ * using admin credentials. This avoids needing the user's password on the client-side
+ * for subsequent project selections.
+ * @param openstackUserId The OpenStack user ID.
+ * @param projectId The OpenStack project ID to scope the token to.
+ * @returns The project-scoped authentication token.
+ */
+export const getProjectScopedTokenForUser = async (openstackUserId: string, projectId: string): Promise<string> => {
+  const adminToken = await getAdminTokenSecurely();
+  const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
+  const { gravity_project_id: defaultDomainId } = await getAdminCredentialsFromSupabase(); // Get from admin_credentials
+
+  if (!keystoneUrl) {
+    throw new Error("OpenStack Keystone URL is not configured.");
+  }
+
+  try {
+    const authResponse = await api.post(`${keystoneUrl}/auth/tokens`, {
+      auth: {
+        identity: {
+          methods: ['token'], // Authenticate using the admin token
+          token: {
+            id: adminToken,
+          },
+        },
+        scope: {
+          project: { id: projectId },
+          user: { id: openstackUserId, domain: { id: defaultDomainId } } // Scope to the specific user and project
+        },
+      },
+    });
+
+    if (authResponse.status !== 201) {
+      throw new Error(`Failed to get project-scoped token: ${authResponse.statusText}`);
+    }
+
+    const token = authResponse.headers['x-subject-token'];
+    if (!token) {
+      throw new Error('Project-scoped token not found in response headers.');
+    }
+    log(`Project-scoped token obtained for user ${openstackUserId} on project ${projectId}.`);
+    return token;
+
+  } catch (error) {
+    logError(`Error getting project-scoped token for user ${openstackUserId} on project ${projectId}:`, error);
+    if (axios.isAxiosError(error) && error.response) {
+      logError('Axios Get Project Scoped Token Error Details:', error.response.status, error.response.data);
+      throw new Error(`Get Project Scoped Token API request failed: ${error.response.status} - ${error.response.data ? JSON.stringify(error.response.data) : 'No response data'}`);
+    }
+    throw error;
+  }
+};
+
 
 // Orchestration function for initial OpenStack provisioning during signup (Creates User and Project)
 // Now handles generating OpenStack username and storing it in Supabase metadata
-export const provisionOpenStackUserAndProject = async (email: string, password: string, baseProjectName: string): Promise<{ userId: string, projectId: string, projectName: string }> => {
+export const provisionOpenStackUserAndProject = async (email: string, password: string, baseProjectName: string): Promise<{ userId: string, projectId: string, projectName: string, openstackUsername: string }> => {
   // This function now uses the secure getAdminTokenSecurely method internally.
   try {
     // Generate a unique project name by appending a random string
@@ -416,7 +475,7 @@ export const provisionOpenStackUserAndProject = async (email: string, password: 
     await assignRoleToUserOnProject(openstackUserId, projectId, 'member'); // Assign default role, using 'member'
     log('[provisionGravityStackUserAndProject] User assigned to project successfully.');
 
-    return { userId: openstackUserId, projectId, projectName: uniqueProjectName }; // Return OpenStack user ID
+    return { userId: openstackUserId, projectId, projectName: uniqueProjectName, openstackUsername }; // Return OpenStack user ID and username
   } catch (error) {
     logError('[provisionGravityStackUserAndProject] Error during GravityStack provisioning orchestration:', error);
     throw error; // Re-throw the error so the caller can handle it
@@ -426,8 +485,8 @@ export const provisionOpenStackUserAndProject = async (email: string, password: 
 // NEW: Function to add a new project for an existing OpenStack user
 export const addProjectToExistingUser = async (openstackUserId: string, baseProjectName: string): Promise<{ id: string, name: string }> => {
     const adminToken = await getAdminTokenSecurely();
-    const keystoneUrl = import.meta.env.LOGIN_URL;
-    const defaultDomainId = import.meta.env.VITE_OPENSTACK_DEFAULT_DOMAIN_ID || 'default';
+    const keystoneUrl = await getCommonConfig('LOGIN_URL'); // Use getCommonConfig
+    const { gravity_project_id: defaultDomainId } = await getAdminCredentialsFromSupabase(); // Get from admin_credentials
 
     if (!keystoneUrl) {
         throw new Error("OpenStack Keystone URL is not configured.");

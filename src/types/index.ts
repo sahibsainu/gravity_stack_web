@@ -6,11 +6,19 @@ export interface AuthState {
   isLoading: boolean;
   openstackToken: string | null;
   selectedProjectId: string | null;
-  userProjects: OpenStackProject[]; // List of projects the user has access to
+  userProjects: OpenStackProject[];
 }
 
 export interface OpenStackProject {
   id: string;
-  name: string; // The actual OpenStack project name (includes suffix)
-  displayName: string; // The name displayed to the user (without suffix)
+  name: string;
+  displayName: string; // A user-friendly name derived from the OpenStack project name
+  createdAt?: string; // Added creation timestamp
+}
+
+// Updated DashboardEnvironment to only include fields available from OpenStackProject
+export interface DashboardEnvironment extends OpenStackProject {
+  // Added for new columns, but might not be directly populated by current API calls
+  availabilityZone?: string; // Placeholder for AZ, not directly from Keystone project API
+  assignedUsersCount?: number; // Placeholder for user count, requires additional API calls
 }

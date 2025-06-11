@@ -14,12 +14,9 @@ const Signup = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState(1); // 1: Supabase signup, 2: OpenStack project name
-  const [openstackProjectName, setOpenstackProjectName] = useState('');
-  const [isProvisioning, setIsProvisioning] = useState(false);
-  const [provisioningError, setProvisioningError] = useState('');
+  const [provisioningError, setProvisioningError] = useState(''); // Keep provisioning error state
 
-  const { register, authState, setUserProjects, selectProject } = useAuth(); // Get authState, setUserProjects, selectProject
+  const { register, setUserProjects, selectProject } = useAuth(); // Get setUserProjects, selectProject
   const navigate = useNavigate();
 
   // Function to suggest a default project name
@@ -32,9 +29,10 @@ const Signup = () => {
     return sanitizedName.replace(/^-+|-+$/g, '').replace(/-+/g, '-');
   };
 
-  const handleSupabaseSignup = async (e: React.FormEvent) => {
+  const handleSignupAndProvision = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setProvisioningError(''); // Clear provisioning error
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -49,51 +47,17 @@ const Signup = () => {
     setIsLoading(true);
 
     try {
+      // Step 1: Supabase registration
       await register(email, password);
-      // Supabase registration successful, move to step 2
-      setStep(2);
-      // Suggest a default project name based on email
-      setOpenstackProjectName(suggestProjectName(email));
-    } catch (err: any) {
-      logError('[Signup] Supabase signup failed:', err);
-      setError(err.message || 'Failed to create account. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      log('[Signup] Supabase registration successful.');
 
-  const handleOpenStackProvisioning = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProvisioningError('');
-    setIsProvisioning(true);
+      // Step 2: Provision OpenStack user and a default project
+      const defaultProjectName = suggestProjectName(email);
+      log(`[Signup] Provisioning OpenStack user and default project: ${defaultProjectName}`);
+      const { userId: openstackUserId, projectId: provisionedProjectId, openstackUsername } = await provisionOpenStackUserAndProject(email, password, defaultProjectName);
+      log(`[Signup] OpenStack user ID: ${openstackUserId}, Project ID: ${provisionedProjectId}, Username: ${openstackUsername}`);
 
-    const trimmedProjectName = openstackProjectName.trim();
-
-    // Basic validation for project name
-    if (!trimmedProjectName) {
-      setProvisioningError('OpenStack project name cannot be empty.');
-      setIsProvisioning(false);
-      return;
-    }
-
-    // --- Duplicate Project Name Check ---
-    // Check if the user already has a project with this base name
-    const existingProjectNames = authState.userProjects.map(p => p.displayName.toLowerCase());
-    if (existingProjectNames.includes(trimmedProjectName.toLowerCase())) {
-        setProvisioningError(`You already have a project named "${trimmedProjectName}". Please choose a different name.`);
-        setIsProvisioning(false);
-        return;
-    }
-    // --- End Duplicate Check ---
-
-
-    try {
-      // Use the email as the username for OpenStack as per requirement
-      // The provisionOpenStackUserAndProject function now handles adding the random suffix
-      await provisionOpenStackUserAndProject(email, password, trimmedProjectName);
-
-      // --- Start: New logic to fetch and select project after provisioning ---
-      // Explicitly fetch the latest user data after provisioning completes
+      // Step 3: Fetch updated user and projects from Supabase after metadata update
       log('[Signup] Fetching updated user after provisioning...');
       const { data: { user: updatedUser }, error: fetchUserError } = await supabase.auth.getUser();
 
@@ -102,61 +66,34 @@ const Signup = () => {
           throw new Error("Failed to retrieve user information after provisioning.");
       }
 
-      log("[Signup] Fetched updated user:", updatedUser); // Log the full user object
-      // Updated log message for metadata
-      log("[Signup] Fetched updated user metadata (GravityStack info):", updatedUser.user_metadata); // Log the metadata
+      log("[Signup] Fetched updated user:", updatedUser);
+      log("[Signup] Fetched updated user metadata (GravityStack info):", updatedUser.user_metadata);
 
-      // Get the OpenStack user ID and username from the *updated* user's metadata
-      const openstackUserId = updatedUser.user_metadata?.openstack_user_id as string | undefined;
-      const openstackUsername = updatedUser.user_metadata?.openstack_username as string | undefined;
-
-      // Updated log messages
-      log(`[Signup] Retrieved gravitystackUserId: ${openstackUserId}`); // Log the retrieved ID
-      log(`[Signup] Retrieved gravitystackUsername: ${openstackUsername}`); // Log the retrieved username value
-
-      if (!openstackUserId) {
-          logError("[Signup] OpenStack user ID missing in fetched metadata:", updatedUser.user_metadata); // Add log
-          throw new Error("OpenStack user ID not found in updated user metadata.");
-      }
-
-       if (!openstackUsername) {
-           logError("[Signup] OpenStack username missing in fetched metadata:", updatedUser.user_metadata); // Add log
-           throw new Error("OpenStack username not found in user metadata.");
-      }
-
-
-      // Fetch the user's projects using the retrieved OpenStack user ID
-      // Updated log message
+      // Step 4: Fetch the user's projects using the retrieved OpenStack user ID
       log(`[Signup] Fetching projects for GravityStack user ID: ${openstackUserId}`);
       const projects = await listUserProjects(openstackUserId);
       log("[Signup] Fetched user projects:", projects);
-
 
       if (projects.length === 0) {
           throw new Error("No projects found after provisioning.");
       }
 
-      // Update the auth state in the context with the fetched projects
-      // setUserProjects now handles adding the displayName
+      // Step 5: Update the auth state in the context with the fetched projects
       setUserProjects(projects);
 
-      // Automatically select the first project and get the token
-      const firstProjectId = projects[0].id;
-      // Updated log message
-      log(`[Signup] Selecting project ID: ${firstProjectId} for GravityStack username: ${openstackUsername}`);
-      // Pass the retrieved openstackUsername directly to selectProject
-      await selectProject(firstProjectId, openstackUsername, password); // Use the password entered during signup
+      // Step 6: Automatically select the first project and get the token
+      log(`[Signup] Selecting project ID: ${provisionedProjectId}`);
+      await selectProject(provisionedProjectId); // No need to pass password here, selectProject now uses admin token
+      log('[Signup] Project selected successfully.');
 
-      // --- End: New logic ---
-
-      // Provisioning successful, navigate to dashboard
-      log('[Signup] Provisioning and project setup successful. Navigating to dashboard.');
-      navigate('/dashboard');
+      // Provisioning successful, navigate to dashboard environments page
+      log('[Signup] Provisioning and project setup successful. Navigating to dashboard environments.');
+      navigate('/dashboard/environments');
     } catch (err: any) {
-      logError("[Signup] Provisioning and project setup failed:", err);
-      setProvisioningError(err.message || 'Failed to provision OpenStack resources or set up project. Please contact support.');
+      logError('[Signup] Signup and provisioning failed:', err);
+      setProvisioningError(err.message || 'Failed to create account or provision cloud resources. Please try again.');
     } finally {
-      setIsProvisioning(false);
+      setIsLoading(false);
     }
   };
 
@@ -178,32 +115,28 @@ const Signup = () => {
                   </div>
                 </div>
                 <h1 className="text-2xl font-bold text-space-900">
-                  {step === 1 ? 'Start Your Free Trial' : 'Setup Your Cloud Project'}
+                  Start Your Free Trial
                 </h1>
                 <p className="text-cosmic-600 mt-2">
-                  {step === 1
-                    ? 'Get full access to all features for 14 days, no credit card required'
-                    : 'Tell us about your first GravityStack project'}
+                  Get full access to all features for 14 days, no credit card required
                 </p>
               </div>
 
-              {step === 1 && error && (
+              {error && (
                 <div className="mb-6 bg-error-50 text-error-700 p-3 rounded-lg flex items-center">
                   <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
                   <p className="text-sm">{error}</p>
                 </div>
               )}
 
-               {step === 2 && provisioningError && (
+               {provisioningError && (
                 <div className="mb-6 bg-error-50 text-error-700 p-3 rounded-lg flex items-center">
                   <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
                   <p className="text-sm">{provisioningError}</p>
                 </div>
               )}
 
-
-              {step === 1 && (
-                <form onSubmit={handleSupabaseSignup} className="space-y-6">
+                <form onSubmit={handleSignupAndProvision} className="space-y-6">
                   <div>
                     <label htmlFor="email" className="label">
                       Email Address
@@ -282,50 +215,12 @@ const Signup = () => {
                     }`}
                   >
                     {isLoading ? (
-                      <span>Creating Account...</span>
+                      <span>Creating Account & Project...</span>
                     ) : (
                       <span>Create Account & Start Free Trial</span>
                     )}
                   </button>
                 </form>
-              )}
-
-              {step === 2 && (
-                 <form onSubmit={handleOpenStackProvisioning} className="space-y-6">
-                    <div>
-                      <label htmlFor="openstack-project-name" className="label">
-                        Project Name
-                      </label>
-                      <input
-                        id="openstack-project-name"
-                        type="text"
-                        value={openstackProjectName}
-                        onChange={(e) => setOpenstackProjectName(e.target.value)}
-                        className="input"
-                        placeholder="e.g., my-first-project"
-                        required
-                      />
-                       <p className="mt-2 text-sm text-cosmic-600">
-                        Choose a name for your primary GravityStack project.
-                      </p>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isProvisioning}
-                      className={`w-full btn-primary flex justify-center items-center ${
-                        isProvisioning ? 'opacity-70 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      {isProvisioning ? (
-                        <span>Setting up Project...</span>
-                      ) : (
-                        <span>Setup My Project</span>
-                      )}
-                    </button>
-                 </form>
-              )}
-
 
               <div className="mt-8 space-y-4">
                 <div className="flex items-start">
